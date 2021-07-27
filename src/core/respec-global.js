@@ -8,7 +8,9 @@
  * This module also adds the legacy `document.respecIsReady` property for
  * backward compatibility. It is now an alias to `document.respec.ready`.
  */
-import { pub, sub } from "./pubsubhub.js";
+import { serialize } from "../core/exporter.js";
+import { showWarning } from "../core/utils.js";
+import { sub } from "./pubsubhub.js";
 
 export const name = "core/respec-global";
 
@@ -18,6 +20,18 @@ class ReSpec {
     this._respecDonePromise = new Promise(resolve => {
       sub("end-all", resolve, { once: true });
     });
+
+    this.errors = [];
+    this.warnings = [];
+
+    sub("error", rsError => {
+      console.error(rsError, rsError.toJSON());
+      this.errors.push(rsError);
+    });
+    sub("warn", rsError => {
+      console.warn(rsError, rsError.toJSON());
+      this.warnings.push(rsError);
+    });
   }
 
   get version() {
@@ -26,6 +40,10 @@ class ReSpec {
 
   get ready() {
     return this._respecDonePromise;
+  }
+
+  async toHTML() {
+    return serialize("html", document);
   }
 }
 
@@ -40,7 +58,7 @@ export function init() {
         const msg =
           "`document.respecIsReady` is deprecated and will be removed in a future release.";
         const hint = "Use `document.respec.ready` instead.";
-        pub("warn", `${msg} ${hint}`);
+        showWarning(msg, name, { hint });
         respecIsReadyWarningShown = true;
       }
       return document.respec.ready;
