@@ -232,6 +232,34 @@ describe("Core — Definitions", () => {
     }
   });
 
+  it("supports permission type", async () => {
+    const ops = {
+      config: makeBasicConfig(),
+      body: `
+          <p id="permission">
+            <dfn class="permission">"permission"</dfn>
+            <dfn class="permission">needs-quotes</dfn>
+            <dfn class="permission">"no spaces allowed"</dfn>
+            <a>"permission"</a>
+          </p>
+        `,
+    };
+    const doc = await makeRSDoc(ops);
+    const permission = doc.querySelector("#permission dfn");
+    expect(permission.dataset.dfnType).toBe("permission");
+    expect(permission.dataset.export).toBe("");
+
+    // invalid ones
+    const errors = findDfnErrors(doc);
+    expect(errors.length).toBe(2);
+    expect(errors[0].message).toContain("quotes");
+    expect(errors[1].message).toContain("Invalid permission name");
+
+    // link check
+    const a = doc.querySelector("#permission a");
+    expect(a.hash).toBe("#dfn-permission");
+  });
+
   describe("internal slot definitions", () => {
     const body = `
       <section data-dfn-for="Test" data-cite="HTML">
@@ -567,6 +595,65 @@ describe("Core — Definitions", () => {
       expect(dfn.dataset.dfnType).toBe("event");
       expect(dfn.textContent).toBe("event");
       expect(dfn.dataset.export).toBe("");
+    });
+
+    it("supports no-export class", async () => {
+      const body = `
+        <section data-dfn-for="Foo">
+          <h2>No export</h2>
+          <pre class="idl">
+            [Exposed=Window] interface Foo {};
+          </pre>
+          <p>
+            <dfn class="no-export">
+              no export
+            </dfn>
+            <!-- normally exported, so we override it -->
+            <dfn class="element no-export">
+              element
+            </dfn>
+            <dfn class="no-export">Foo</dfn>
+          </p>
+      </section>
+      `;
+      const ops = makeStandardOps(null, body);
+      const doc = await makeRSDoc(ops);
+      const [regularDfn, elementDfn, idlDfn] = doc.querySelectorAll("dfn");
+
+      expect(elementDfn.dataset.noexport).toBe("");
+      expect(regularDfn.dataset.dfnType).toBe("dfn");
+      expect(regularDfn.dataset.export).toBeUndefined();
+
+      expect(elementDfn.dataset.noexport).toBe("");
+      expect(elementDfn.dataset.dfnType).toBe("element");
+      expect(elementDfn.dataset.export).toBeUndefined();
+
+      expect(idlDfn.dataset.noexport).toBe("");
+      expect(idlDfn.dataset.dfnType).toBe("interface");
+      expect(idlDfn.dataset.export).toBeUndefined();
+
+      // Check validation error
+      const errors = findDfnErrors(doc);
+      expect(errors).toHaveSize(0);
+    });
+
+    it("errors if the dfn declares both export and no-export classes", async () => {
+      const body = `
+        <section>
+          <h2>Confused exports</h2>
+          <p>
+            <dfn class="export no-export">can't decide</dfn>
+            <dfn class="no-export" data-export="">data noexport</dfn>
+          </p>
+        </section>
+      `;
+      const ops = makeStandardOps(null, body);
+      const doc = await makeRSDoc(ops);
+      // Check validation error
+      const errors = findDfnErrors(doc);
+      expect(errors).toHaveSize(2);
+      expect(errors[0].message).toContain("Declares both");
+      expect(errors[1].message).toContain("but also has a");
     });
   });
 });
